@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Crypto + Naira Tracker</title>
+<style>
+  :root{--bg:#f6f7f9;--card:#fff;--text:#14181f;--muted:#6b7380;--line:#e3e6eb;--accent:#0a8f5b;
+    box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e1116;--card:#171b22;--text:#eef1f5;--muted:#8b94a3;--line:#262c36;--accent:#3ddc97}}
+  :root[data-theme="dark"]{--bg:#0e1116;--card:#171b22;--text:#eef1f5;--muted:#8b94a3;--line:#262c36;--accent:#3ddc97}
+  html{scroll-padding-top:env(safe-area-inset-top,0px)}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+  main{max-width:640px;margin:0 auto;padding:16px}
+  h1{font-size:20px;margin:8px 0 2px}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:14px}
+  .badge{display:inline-block;padding:2px 8px;border-radius:99px;font-size:12px;border:1px solid var(--line);color:var(--muted)}
+  .badge.live{color:var(--accent);border-color:var(--accent)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+  .row{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .big{font-size:24px;font-weight:700}
+  .lbl{color:var(--muted);font-size:13px}
+  .up{color:var(--accent)} .down{color:#e5484d}
+  .tabs{display:flex;gap:8px;margin-bottom:10px}
+  button{font:inherit;padding:6px 14px;border-radius:99px;border:1px solid var(--line);background:var(--card);color:var(--text);cursor:pointer}
+  button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  svg{width:100%;height:auto;display:block}
+</style>
+</head>
+<body>
+<main>
+  <h1>Crypto + Naira Tracker</h1>
+  <div class="sub"><span id="status" class="badge">loading…</span> <span id="time"></span></div>
+
+  <div class="card">
+    <div class="lbl">Implied USD → NGN rate</div>
+    <div class="big" id="rate">–</div>
+    <div class="lbl">Worked out from Bitcoin’s price in naira ÷ its price in dollars</div>
+  </div>
+
+  <div id="coins"></div>
+
+  <div class="card">
+    <div class="tabs" id="tabs"></div>
+    <div class="lbl" id="chartTitle"></div>
+    <svg id="chart" viewBox="0 0 600 220" role="img" aria-label="7 day price chart"></svg>
+  </div>
+</main>
+
+<script>
+// ---- 1. SETTINGS: add a coin here and the whole page picks it up ----
+const COINS = [
+  { id: "bitcoin",  sym: "BTC" },
+  { id: "ethereum", sym: "ETH" },
+  { id: "solana",   sym: "SOL" }
+];
+const API = "https://api.coingecko.com/api/v3";
+let selected = COINS[0];
+let live = {};
+
+// ---- 2. FALLBACK DATA: used when the API can't be reached ----
+const DEMO = {
+  bitcoin:  { usd: 98000, ngn: 150000000, usd_24h_change: 1.2 },
+  ethereum: { usd: 3500,  ngn: 5350000,   usd_24h_change: -0.8 },
+  solana:   { usd: 210,   ngn: 321000,    usd_24h_change: 2.4 }
+};
+function demoSeries(id) {
+  const base = DEMO[id].usd, out = [];
+  for (let i = 0; i < 48; i++) out.push(base * (1 + Math.sin(i / 5) * 0.03 + i * 0.0004));
+  return out;
+}
+
+// ---- 3. FETCHING ----
+async function getPrices() {
+  const ids = COINS.map(c => c.id).join(",");
+  const url = API + "/simple/price?ids=" + ids + "&vs_currencies=usd,ngn&include_24hr_change=true";
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("API error " + res.status);
+  const data = await res.json();
+  for (const id in data) data[id].usd_24h_change = data[id].usd_24h_change ?? 0;
+  return data;
+}
+async function getSeries(id) {
+  const res = await fetch(API + "/coins/" + id + "/market_chart?vs_currency=usd&days=7");
+  if (!res.ok) throw new Error("API error " + res.status);
+  const data = await res.json();
+  return data.prices.map(p => p[1]);
+}
+
+// ---- 4. DRAWING ----
+const fmt = (n, cur) => (cur === "ngn" ? "₦" : "$") + Number(n).toLocaleString("en-US", { maximumFractionDigits: n < 10 ? 4 : 0 });
+
+function renderCoins() {
+  document.getElementById("coins").innerHTML = COINS.map(c => {
+    const p = live[c.id], ch = p.usd_24h_change;
+    return '<div class="card"><div class="row"><b>' + c.sym + '</b>' +
+      '<span class="' + (ch >= 0 ? "up" : "down") + '">' + (ch >= 0 ? "▲ " : "▼ ") + Math.abs(ch).toFixed(2) + '% (24h)</span></div>' +
+      '<div class="big">' + fmt(p.usd, "usd") + '</div>' +
+      '<div class="lbl">' + fmt(p.ngn, "ngn") + '</div></div>';
+  }).join("");
+  const btc = live.bitcoin;
+  document.getElementById("rate").textContent = "₦" + (btc.ngn / btc.usd).toLocaleString("en-US", { maximumFractionDigits: 0 });
+}
+
+function renderTabs() {
+  const box = document.getElementById("tabs");
+  box.innerHTML = "";
+  COINS.forEach(c => {
+    const b = document.createElement("button");
+    b.textContent = c.sym;
+    b.className = c.id === selected.id ? "on" : "";
+    b.onclick = () => { selected = c; renderTabs(); loadChart(); };
+    box.appendChild(b);
+  });
+}
+
+function drawChart(values) {
+  const W = 600, H = 220, pad = 10;
+  const min = Math.min(...values), max = Math.max(...values);
+  const pts = values.map((v, i) => {
+    const x = pad + (i / (values.length - 1)) * (W - pad * 2);
+    const y = H - pad - ((v - min) / (max - min || 1)) * (H - pad * 2);
+    return x.toFixed(1) + "," + y.toFixed(1);
+  });
+  document.getElementById("chart").innerHTML =
+    '<polyline fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" points="' + pts.join(" ") + '"/>';
+  document.getElementById("chartTitle").textContent =
+    selected.sym + " · last 7 days · low " + fmt(min, "usd") + " · high " + fmt(max, "usd");
+}
+
+async function loadChart() {
+  let series;
+  try { series = live._isLive ? await getSeries(selected.id) : demoSeries(selected.id); }
+  catch (e) { series = demoSeries(selected.id); }
+  drawChart(series);
+}
+
+// ---- 5. START ----
+async function init() {
+  const status = document.getElementById("status");
+  try {
+    live = await getPrices();
+    live._isLive = true;
+    status.textContent = "Live"; status.className = "badge live";
+  } catch (e) {
+    live = JSON.parse(JSON.stringify(DEMO));
+    status.textContent = "Demo data"; status.className = "badge";
+  }
+  document.getElementById("time").textContent = "Updated " + new Date().toLocaleTimeString();
+  renderCoins(); renderTabs(); loadChart();
+}
+init();
+setInterval(init, 60000);
+</script>
+</body>
+</html>
