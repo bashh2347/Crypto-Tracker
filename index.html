@@ -52,7 +52,11 @@
 const COINS = [
   { id: "bitcoin",  sym: "BTC" },
   { id: "ethereum", sym: "ETH" },
-  { id: "solana",   sym: "SOL" }
+  { id: "solana",   sym: "SOL" },  { id: "solana",   sym: "SOL" },
+  { id: "binancecoin", sym: "BNB" },
+  { id: "ripple",   sym: "XRP" }
+];
+  
 ];
 const API = "https://api.coingecko.com/api/v3";
 let selected = COINS[0];
@@ -62,7 +66,9 @@ let live = {};
 const DEMO = {
   bitcoin:  { usd: 98000, ngn: 150000000, usd_24h_change: 1.2 },
   ethereum: { usd: 3500,  ngn: 5350000,   usd_24h_change: -0.8 },
-  solana:   { usd: 210,   ngn: 321000,    usd_24h_change: 2.4 }
+  solana:   { usd: 210,   ngn: 321000,    usd_24h_change: 2.4 },
+  binancecoin: { usd: 650, ngn: 995000, usd_24h_change: 0.5 },
+  ripple:      { usd: 2.3, ngn: 3500,   usd_24h_change: -1.1 }
 };
 function demoSeries(id) {
   const base = DEMO[id].usd, out = [];
